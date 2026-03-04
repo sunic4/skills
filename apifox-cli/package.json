@@ -1,5 +1,5 @@
 {
-  "name": "apifox-cli",
+  "name": "@sunic4/apifox-cli",
   "version": "1.0.0",
   "description": "Apifox CLI tool for importing and exporting OpenAPI/Postman data",
   "main": "dist/index.js",
