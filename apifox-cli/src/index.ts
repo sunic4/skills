@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import { Command } from 'commander';
 import * as path from 'path';
 import { importOpenApi } from './commands/import-openapi.js';
