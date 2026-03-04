@@ -4,10 +4,6 @@ Apifox 命令行工具，用于导入同步 OpenAPI/Postman 数据。
 
 ## 快速开始
 
-```bash
-npx skills add https://github.com/sunic4/apifox-skill
-```
-
 ### 1. 初始化配置
 
 ```bash
