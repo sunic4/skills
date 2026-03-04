@@ -1,5 +1,5 @@
 {
-  "name": "@sunic4/apifox-cli",
+  "name": "@sunic/apifox-cli",
   "version": "1.0.0",
   "description": "Apifox CLI tool for importing and exporting OpenAPI/Postman data",
   "main": "dist/index.js",
@@ -11,7 +11,8 @@
     "dev": "tsc --watch",
     "start": "node dist/index.js",
     "debug": "node --inspect dist/index.js",
-    "prepublish": "npm run build"
+    "prepublish": "npm run build",
+    "pub": "npm run build & npm publish"
   },
   "keywords": [
     "apifox",
