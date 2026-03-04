@@ -28,9 +28,7 @@ export function loadConfig(): Config {
   }
 
   if (!token) {
-    console.error('Error: Token not found in .apifox/.env file');
-    console.error('Please create .apifox/.env with: APIFOX_TOKEN=your_token');
-    process.exit(1);
+    throw new Error('Token not found in .apifox/.env file');
   }
 
   return { token, baseDir };

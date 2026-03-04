@@ -9,20 +9,27 @@ import { listProjects } from './commands/list-projects.js';
 import { loadConfig, ensureProjectDir } from './config.js';
 import { initConfig } from './commands/init.js';
 
+async function getToken(optionsToken?: string): Promise<string> {
+  if (optionsToken) {
+    return optionsToken;
+  }
+  try {
+    return loadConfig().token;
+  } catch (error: any) {
+    console.log('未检测到有效的配置文件，正在初始化...\n');
+    await initConfig({});
+    console.log('\n请修改 .apifox/.env 文件中的 APIFOX_TOKEN 为你的访问令牌');
+    console.log('然后重新运行命令');
+    process.exit(1);
+  }
+}
+
 const program = new Command();
 
 program
   .name('apifox')
   .description('Apifox CLI - 导入同步 OpenAPI/Postman 数据')
   .version('1.0.0');
-
-program
-  .command('init')
-  .description('初始化配置文件')
-  .option('-t, --token <token>', 'Apifox 访问令牌')
-  .action(async (options) => {
-    await initConfig({ token: options.token });
-  });
 
 program
   .command('import-openapi')
@@ -41,7 +48,7 @@ program
   .option('--delete-unmatched', '删除不匹配的资源', false)
   .option('-o, --output <file>', '输出文件路径')
   .action(async (options) => {
-    const token = options.token || loadConfig().token;
+    const token = await getToken(options.token);
     await importOpenApi({ ...options, token });
   });
 
@@ -58,7 +65,7 @@ program
   .option('--module-id <id>', '模块 ID')
   .option('-o, --output <file>', '输出文件路径')
   .action(async (options) => {
-    const token = options.token || loadConfig().token;
+    const token = await getToken(options.token);
     await importPostman({ ...options, token });
   });
 
@@ -76,8 +83,7 @@ program
   .option('--branch-id <id>', '分支 ID')
   .option('--module-id <id>', '模块 ID')
   .action(async (options) => {
-    const config = loadConfig();
-    const token = options.token || config.token;
+    const token = await getToken(options.token);
     
     let outputPath = options.output;
     if (!outputPath) {
@@ -95,10 +101,10 @@ program
   .option('-t, --token <token>', 'Apifox 访问令牌 (或设置在 .apifox/.env 中)')
   .option('-o, --output <file>', '输出文件路径 (默认: .apifox/projects.md)')
   .action(async (options) => {
-    const config = loadConfig();
-    const token = options.token || config.token;
+    const token = await getToken(options.token);
     let outputPath = options.output;
     if (!outputPath) {
+      const config = loadConfig();
       outputPath = path.join(config.baseDir, 'projects.md');
     }
     await listProjects({ token, output: outputPath });

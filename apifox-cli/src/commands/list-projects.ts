@@ -1,7 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { ApifoxClient } from '../client';
-import { ensureProjectDir, loadConfig } from '../config';
 
 interface ListProjectsOptions {
   token: string;
