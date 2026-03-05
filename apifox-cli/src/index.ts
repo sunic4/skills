@@ -33,8 +33,6 @@ program
         console.log(`\nNo results found for "${keyword}"\n`);
         return;
       }
-      console.log(`\nFound ${results.length} result(s):\n`);
-      console.log('─'.repeat(80));
       console.log(JSON.stringify(results))
     } catch (error) {
       console.error('Error:', error);
