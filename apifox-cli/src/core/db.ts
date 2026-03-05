@@ -1,28 +1,33 @@
+import { Kysely, SqliteDialect } from 'kysely';
 import Database from 'better-sqlite3';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { Project, OpenApi } from './types';
+import { Database as DatabaseType } from './types/db';
 
 const DB_PATH = path.join(os.homedir(), '.apifox', 'apifox.db');
 
-let db: Database.Database | null = null;
+let db: Kysely<DatabaseType> | null = null;
+let sqliteDb: Database.Database | null = null;
 
-export function getDb(): Database.Database {
+export function getDb(): Kysely<DatabaseType> {
   if (!db) {
     const dir = path.dirname(DB_PATH);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
-    db = new Database(DB_PATH);
-    initTables();
+    const database = new Database(DB_PATH);
+    sqliteDb = database;
+    initTables(database);
+    db = new Kysely<DatabaseType>({
+      dialect: new SqliteDialect({ database }),
+    });
   }
   return db;
 }
 
-function initTables(): void {
-  const database = db!;
-
+function initTables(database: Database.Database): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS projects (
       id INTEGER PRIMARY KEY,
@@ -45,142 +50,177 @@ function initTables(): void {
       description TEXT DEFAULT '',
       updatedAt TEXT DEFAULT ''
     );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_openapis_project_url
+    ON openapis(projectId, url);
   `);
 }
 
 export function closeDb(): void {
   if (db) {
-    db.close();
+    db.destroy();
     db = null;
+  }
+  if (sqliteDb) {
+    sqliteDb.close();
+    sqliteDb = null;
   }
 }
 
+function rowToProject(row: any): Project {
+  return {
+    ...row,
+    hasPublicDocsSite: Boolean(row.hasPublicDocsSite)
+  };
+}
+
 export const projectDb = {
-  insert(project: Project): number {
-    const stmt = getDb().prepare(`
-      INSERT INTO projects (id, name, teamId, description, roleType, visibility, type, hasPublicDocsSite)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    stmt.run(
-      project.id,
-      project.name,
-      project.teamId,
-      project.description,
-      project.roleType,
-      project.visibility,
-      project.type,
-      project.hasPublicDocsSite ? 1 : 0
-    );
-    return project.id;
+  insert(project: Project): Promise<number> {
+    const db = getDb();
+    return db.insertInto('projects')
+      .values({
+        id: project.id,
+        name: project.name,
+        teamId: project.teamId,
+        description: project.description,
+        roleType: project.roleType,
+        visibility: project.visibility,
+        type: project.type,
+        hasPublicDocsSite: project.hasPublicDocsSite ? 1 : 0
+      })
+      .executeTakeFirst()
+      .then(() => project.id);
   },
 
-  findAll(): Project[] {
-    const stmt = getDb().prepare('SELECT * FROM projects ORDER BY id DESC');
-    const rows = stmt.all() as any[];
-    return rows.map(row => ({
-      ...row,
-      hasPublicDocsSite: Boolean(row.hasPublicDocsSite)
-    }));
+  findAll(): Promise<Project[]> {
+    const db = getDb();
+    const rows = db.selectFrom('projects')
+      .selectAll()
+      .orderBy('id', 'desc')
+      .execute();
+    return rows.then(list => list.map(rowToProject));
   },
 
-  findByProjectId(projectId: number): Project | undefined {
-    const stmt = getDb().prepare('SELECT * FROM projects WHERE id = ?');
-    const row = stmt.get(projectId) as any;
-    if (row) {
-      return { ...row, hasPublicDocsSite: Boolean(row.hasPublicDocsSite) };
-    }
-    return undefined;
+  findByProjectId(projectId: number): Promise<Project | undefined> {
+    const db = getDb();
+    return db.selectFrom('projects')
+      .selectAll()
+      .where('id', '=', projectId)
+      .executeTakeFirst()
+      .then(row => row ? rowToProject(row) : undefined);
   },
 
-  upsert(project: Project): number {
-    const existing = projectDb.findByProjectId(project.id);
-    if (existing) {
-      const stmt = getDb().prepare(`
-        UPDATE projects SET name = ?, teamId = ?, description = ?,
-        roleType = ?, visibility = ?, type = ?, hasPublicDocsSite = ?
-        WHERE id = ?
-      `);
-      stmt.run(
-        project.name,
-        project.teamId,
-        project.description,
-        project.roleType,
-        project.visibility,
-        project.type,
-        project.hasPublicDocsSite ? 1 : 0,
-        project.id
-      );
-      return project.id;
-    }
-    return projectDb.insert(project);
+  upsert(project: Project): Promise<number> {
+    const db = getDb();
+    return db.insertInto('projects')
+      .values({
+        id: project.id,
+        name: project.name,
+        teamId: project.teamId,
+        description: project.description,
+        roleType: project.roleType,
+        visibility: project.visibility,
+        type: project.type,
+        hasPublicDocsSite: project.hasPublicDocsSite ? 1 : 0
+      })
+      .onConflict(oc => oc.column('id').doUpdateSet({
+        name: project.name,
+        teamId: project.teamId,
+        description: project.description,
+        roleType: project.roleType,
+        visibility: project.visibility,
+        type: project.type,
+        hasPublicDocsSite: project.hasPublicDocsSite ? 1 : 0
+      }))
+      .executeTakeFirst()
+      .then(() => project.id);
   },
 
-  delete(projectId: number): void {
-    const stmt = getDb().prepare('DELETE FROM projects WHERE id = ?');
-    stmt.run(projectId);
+  delete(projectId: number): Promise<void> {
+    const db = getDb();
+    return db.deleteFrom('projects')
+      .where('id', '=', projectId)
+      .execute()
+      .then(() => undefined);
   },
 };
 
 export const openapiDb = {
-  insert(openapi: OpenApi): number {
-    const stmt = getDb().prepare(`
-      INSERT INTO openapis (projectId, url, name, method, json, description)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `);
-    const result = stmt.run(
-      openapi.projectId,
-      openapi.url,
-      openapi.name,
-      openapi.method,
-      openapi.json,
-    );
-    return result.lastInsertRowid as number;
+  insert(openapi: OpenApi): Promise<number> {
+    const db = getDb();
+    return db.insertInto('openapis')
+      .values({
+        projectId: openapi.projectId,
+        url: openapi.url,
+        name: openapi.name,
+        method: openapi.method,
+        json: openapi.json,
+        description: openapi.description || '',
+        updatedAt: ''
+      })
+      .executeTakeFirst()
+      .then(result => Number(result?.insertId ?? 0));
   },
 
-  findAll(): OpenApi[] {
-    const stmt = getDb().prepare('SELECT * FROM openapis ORDER BY id DESC');
-    return stmt.all() as OpenApi[];
+  findAll(): Promise<OpenApi[]> {
+    const db = getDb();
+    return db.selectFrom('openapis')
+      .selectAll()
+      .orderBy('id', 'desc')
+      .execute();
   },
 
-  findByProjectId(projectId: number): OpenApi[] {
-    const stmt = getDb().prepare('SELECT * FROM openapis WHERE projectId = ? ORDER BY id DESC');
-    return stmt.all(projectId) as OpenApi[];
+  findByProjectId(projectId: number): Promise<OpenApi[]> {
+    const db = getDb();
+    return db.selectFrom('openapis')
+      .selectAll()
+      .where('projectId', '=', projectId)
+      .orderBy('id', 'desc')
+      .execute();
   },
 
-  findByKeyword(keyword: string): OpenApi[] {
-    const stmt = getDb().prepare(`
-      SELECT * FROM openapis 
-      WHERE name LIKE ? OR path LIKE ? OR description LIKE ?
-      ORDER BY id DESC
-    `);
+  findByKeyword(keyword: string): Promise<OpenApi[]> {
+    const db = getDb();
     const pattern = `%${keyword}%`;
-    return stmt.all(pattern, pattern, pattern) as OpenApi[];
+    return db.selectFrom('openapis')
+      .selectAll()
+      .where((eb) => eb.or([
+        eb('name', 'like', pattern),
+        eb('url', 'like', pattern),
+        eb('description', 'like', pattern),
+      ]))
+      .orderBy('id', 'desc')
+      .execute();
   },
 
-  upsert(openapi: OpenApi): number {
-    const stmt = getDb().prepare(`
-      INSERT INTO openapis (projectId, url, name, method, json, description)
-      VALUES (?, ?, ?, ?, ?, ?)
-      ON CONFLICT(projectId, url) DO UPDATE SET
-        name = excluded.name,
-        method = excluded.method,
-        json = excluded.json,
-        description = excluded.description,
-        updatedAt = datetime('now')
-    `);
-    const result = stmt.run(
-      openapi.projectId,
-      openapi.url,
-      openapi.name,
-      openapi.method,
-      openapi.json,
-      openapi.description
-    );
-    return result.lastInsertRowid as number;
+  upsert(openapi: OpenApi): Promise<number> {
+    const db = getDb();
+    return db.insertInto('openapis')
+      .values({
+        projectId: openapi.projectId,
+        url: openapi.url,
+        name: openapi.name,
+        method: openapi.method,
+        json: openapi.json,
+        description: openapi.description || '',
+        updatedAt: ''
+      })
+      .onConflict(oc => oc.columns(['projectId', 'url']).doUpdateSet({
+        name: openapi.name,
+        method: openapi.method,
+        json: openapi.json,
+        description: openapi.description,
+        updatedAt: new Date().toISOString()
+      }))
+      .executeTakeFirst()
+      .then(result => Number(result?.insertId ?? 0));
   },
 
-  deleteByProjectId(projectId: number): void {
-    const stmt = getDb().prepare('DELETE FROM openapis WHERE projectId = ?');
-    stmt.run(projectId);
+  deleteByProjectId(projectId: number): Promise<void> {
+    const db = getDb();
+    return db.deleteFrom('openapis')
+      .where('projectId', '=', projectId)
+      .execute()
+      .then(() => undefined);
   },
 };

@@ -31,12 +31,29 @@ export function saveToken(token: string): void {
 }
 
 function openBrowser(url: string): void {
-  if (process.platform === 'win32') {
-    exec(`start "" "${url}"`);
-  } else if (process.platform === 'darwin') {
-    exec(`open "${url}"`);
-  } else {
-    exec(`xdg-open "${url}"`);
+  const warnManualOpen = (): void => {
+    console.warn(`Failed to open browser automatically. Please open ${url} manually.`);
+  };
+
+  const handleOpenResult = (error: Error | null): void => {
+    if (error) {
+      warnManualOpen();
+    }
+  };
+
+  try {
+    let command = '';
+    if (process.platform === 'win32') {
+      command = `start "" "${url}"`;
+    } else if (process.platform === 'darwin') {
+      command = `open "${url}"`;
+    } else {
+      command = `xdg-open "${url}"`;
+    }
+    const child = exec(command, handleOpenResult);
+    child.on('error', warnManualOpen);
+  } catch {
+    warnManualOpen();
   }
 }
 

@@ -13,6 +13,8 @@ export interface ApifoxClientOptions {
   token: string;
 }
 
+type HttpMethod = 'GET' | 'POST';
+
 export class ApifoxClient {
   private token: string;
 
@@ -29,7 +31,7 @@ export class ApifoxClient {
     };
   }
 
-  private async request<T>(endpoint: string, method: string, body?: object): Promise<T> {
+  private async request<T>(endpoint: string, method: HttpMethod, body?: object): Promise<T> {
     const url = `${API_BASE_URL}${endpoint}`;
 
     const response = await fetch(url, {
@@ -38,12 +40,12 @@ export class ApifoxClient {
       body: body ? JSON.stringify(body) : undefined,
     });
 
-    const text = await response.text();
+    const responseText = await response.text();
 
     if (!response.ok) {
       let errorMessage = `API request failed: ${response.status} ${response.statusText}`;
       try {
-        const errorObj = JSON.parse(text);
+        const errorObj = JSON.parse(responseText);
         if (errorObj.errorMessage) {
           errorMessage = errorObj.errorMessage;
         }
@@ -51,11 +53,11 @@ export class ApifoxClient {
       throw new Error(errorMessage);
     }
 
-    if (!text) {
+    if (!responseText) {
       return { data: [] } as T;
     }
 
-    return JSON.parse(text) as T;
+    return JSON.parse(responseText) as T;
   }
 
   async getProjectList(): Promise<ApiResponse<ProjectListItem[]>> {
