@@ -7,7 +7,7 @@
     "apifox": "dist/index.js"
   },
   "scripts": {
-    "build": "esbuild src/index.ts --bundle --platform=node --outfile=dist/index.js --minify",
+    "build": "esbuild src/index.ts --bundle --platform=node --outfile=dist/index.js --minify --external:better-sqlite3",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
     "debug": "node --inspect dist/index.js",

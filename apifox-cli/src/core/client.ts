@@ -1,3 +1,10 @@
+import {
+  ApiResponse,
+  ProjectListItem,
+  ExportOpenApiRequest,
+  ExportOpenApiResponse
+} from './types';
+
 const API_BASE_URL = 'https://api.apifox.com';
 const API_VERSION = '2024-03-28';
 const CLIENT_VERSION = '2.8.13-alpha.1';
@@ -24,42 +31,47 @@ export class ApifoxClient {
 
   private async request<T>(endpoint: string, method: string, body?: object): Promise<T> {
     const url = `${API_BASE_URL}${endpoint}`;
-    
+
     const response = await fetch(url, {
       method,
       headers: this.getHeaders(),
       body: body ? JSON.stringify(body) : undefined,
     });
 
+    const text = await response.text();
+
     if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`API request failed: ${response.status} ${response.statusText} - ${error}`);
+      let errorMessage = `API request failed: ${response.status} ${response.statusText}`;
+      try {
+        const errorObj = JSON.parse(text);
+        if (errorObj.errorMessage) {
+          errorMessage = errorObj.errorMessage;
+        }
+      } catch { }
+      throw new Error(errorMessage);
     }
 
-    return response.json() as Promise<T>;
+    if (!text) {
+      return { data: [] } as T;
+    }
+
+    return JSON.parse(text) as T;
   }
 
-  async listProjects(): Promise<any> {
-    return this.request('/api/v1/user-projects', 'GET');
+  async getProjectList(): Promise<ApiResponse<ProjectListItem[]>> {
+    return this.request<ApiResponse<ProjectListItem[]>>('/api/v1/user-projects', 'GET');
   }
 
-  async importOpenApi(projectId: string, input: object, options?: object): Promise<any> {
-    const body = {
-      input,
-      options: options || {},
+  async getOpenApiBy(id: number): Promise<ExportOpenApiResponse> {
+    const request: ExportOpenApiRequest = {
+      scope: { type: 'ALL' },
+
+      exportFormat: 'JSON',
     };
-    return this.request(`/v1/projects/${projectId}/import-openapi`, 'POST', body);
-  }
-
-  async importPostman(projectId: string, input: string, options?: object): Promise<any> {
-    const body = {
-      input,
-      options: options || {},
-    };
-    return this.request(`/v1/projects/${projectId}/import-postman-collection`, 'POST', body);
-  }
-
-  async exportOpenApi(projectId: string, options: object): Promise<any> {
-    return this.request(`/v1/projects/${projectId}/export-openapi`, 'POST', options);
+    return this.request<ExportOpenApiResponse>(
+      `/v1/projects/${id}/export-openapi`,
+      'POST',
+      request
+    );
   }
 }
