@@ -24,14 +24,19 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "better-sqlite3": "^12.6.2",
+    "better-sqlite3": "^12.8.0",
     "commander": "^11.1.0",
-    "kysely": "^0.28.11"
+    "kysely": "^0.28.15"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^20.10.0",
-    "esbuild": "^0.27.3",
-    "typescript": "^5.3.0"
+    "@types/node": "^20.19.39",
+    "esbuild": "^0.27.7",
+    "typescript": "^5.9.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3"
+    ]
   }
 }
